@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Formix.Domain.Dtos
 {
@@ -15,5 +15,6 @@ namespace Formix.Domain.Dtos
         public DateTime? FechaRegistro { get; set; }
         public bool? Activo { get; set; }
         public string? ConfiguracionJson { get; set; }
+        public bool Consecutivo { get; set; }
     }
 }

@@ -2,16 +2,15 @@ using System;
 
 namespace Formix.Domain.Dtos
 {
-    public partial class RadicadoDto
+    public class ListaOrdenEscrituracionDto
     {
-        public int? IdRadicado { get; set; }
+        public int IdRadicado { get; set; }
         public int TenantId { get; set; }
         public int ProyectoId { get; set; }
         public int? PlantillaId { get; set; }
         public int UsuarioId { get; set; }
         public string? Consecutivo { get; set; }
         public DateTime? FechaRadicado { get; set; }
-        public DateTime? FechaOe { get; set; }
-        public int? IdEstado { get; set; }
+        public string Proyecto { get; set; }
     }
 }

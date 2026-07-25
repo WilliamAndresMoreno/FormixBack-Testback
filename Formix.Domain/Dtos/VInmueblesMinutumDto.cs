@@ -14,7 +14,7 @@ namespace Formix.Domain.Dtos
         public string? InmuebleBlLinderoEspecial { get; set; }
         public string? InmuebleBlValor { get; set; }
         public string? InmuebleBlValorLetras { get; set; }
-        public decimal? InmuebleBlCoeficiente { get; set; }
+        public string? InmuebleBlCoeficiente { get; set; }
         public string? InmuebleBlCoeficienteLetras { get; set; }
         public int? Orden { get; set; }
         public string? InmuebleBlUnidad { get; set; }

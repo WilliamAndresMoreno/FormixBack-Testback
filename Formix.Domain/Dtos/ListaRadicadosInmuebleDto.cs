@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Formix.Domain.Dtos
 {
@@ -9,7 +9,7 @@ namespace Formix.Domain.Dtos
         public int ProyectoId { get; set; }
         public int? PlantillaId { get; set; }
         public int UsuarioId { get; set; }
-        public int Consecutivo { get; set; }
+        public string? Consecutivo { get; set; }
         public DateTime FechaRadicado { get; set; }
         public int? Orden { get; set; }
         public int InmuebleId { get; set; }
