@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Formix.Infrastructure.Data.Entities;
 
-public partial class ListaRadicado
+public partial class ListaOrdenEscrituracion
 {
     public int IdRadicado { get; set; }
 

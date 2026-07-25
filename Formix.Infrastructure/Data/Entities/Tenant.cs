@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Formix.Infrastructure.Data.Entities;
@@ -26,6 +26,8 @@ public partial class Tenant
     public bool? Activo { get; set; }
 
     public string? ConfiguracionJson { get; set; }
+
+    public bool Consecutivo { get; set; }
 
     public virtual ICollection<Inmueble> Inmuebles { get; set; } = new List<Inmueble>();
 

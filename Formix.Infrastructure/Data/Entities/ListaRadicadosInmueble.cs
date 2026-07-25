@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Formix.Infrastructure.Data.Entities;
@@ -15,7 +15,7 @@ public partial class ListaRadicadosInmueble
 
     public int UsuarioId { get; set; }
 
-    public int Consecutivo { get; set; }
+    public string? Consecutivo { get; set; }
 
     public DateTime FechaRadicado { get; set; }
 

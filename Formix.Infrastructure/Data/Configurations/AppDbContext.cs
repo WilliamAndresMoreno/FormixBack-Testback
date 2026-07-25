@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Formix.Infrastructure.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +18,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Acto> Actos { get; set; }
 
+    public virtual DbSet<CajasCompensacion> CajasCompensacions { get; set; }
+
     public virtual DbSet<Departamento> Departamentos { get; set; }
 
     public virtual DbSet<InmublesTercero> InmublesTerceros { get; set; }
@@ -25,6 +27,8 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<Inmueble> Inmuebles { get; set; }
 
     public virtual DbSet<ListaInmueblesByRadicado> ListaInmueblesByRadicados { get; set; }
+
+    public virtual DbSet<ListaOrdenEscrituracion> ListaOrdenEscrituracions { get; set; }
 
     public virtual DbSet<ListaOtorgante> ListaOtorgantes { get; set; }
 
@@ -62,6 +66,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<RadicadosOtorgantesTipo> RadicadosOtorgantesTipos { get; set; }
 
+    public virtual DbSet<RadicadosPago> RadicadosPagos { get; set; }
+
     public virtual DbSet<RegexPattern> RegexPatterns { get; set; }
 
     public virtual DbSet<Suscripcione> Suscripciones { get; set; }
@@ -80,6 +86,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SysUsuarioRole> SysUsuarioRoles { get; set; }
 
+    public virtual DbSet<TawkWebhookLog> TawkWebhookLogs { get; set; }
+
     public virtual DbSet<Tenant> Tenants { get; set; }
 
     public virtual DbSet<Tercero> Terceros { get; set; }
@@ -90,9 +98,13 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<TiposEstadoCivil> TiposEstadoCivils { get; set; }
 
+    public virtual DbSet<TiposEstadoRadicado> TiposEstadoRadicados { get; set; }
+
     public virtual DbSet<TiposInmuebleHomologación> TiposInmuebleHomologacións { get; set; }
 
     public virtual DbSet<TiposOtorgante> TiposOtorgantes { get; set; }
+
+    public virtual DbSet<TramiteMayasoft> TramitesMayasoft { get; set; } // Tabla ancha de trámites extraídos de MayasoftAPI
 
     public virtual DbSet<VDatosMinutum> VDatosMinuta { get; set; }
 
@@ -115,6 +127,32 @@ public partial class AppDbContext : DbContext
                 .IsUnicode(false);
             entity.Property(e => e.Nombre)
                 .HasMaxLength(100)
+                .IsUnicode(false);
+        });
+
+        modelBuilder.Entity<CajasCompensacion>(entity =>
+        {
+            entity.HasKey(e => e.IdCajaCompensacion);
+
+            entity.ToTable("CajasCompensacion");
+
+            entity.Property(e => e.Celular)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.Codigo)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.Correo)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.Direccion)
+                .HasMaxLength(300)
+                .IsUnicode(false);
+            entity.Property(e => e.Documento)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.Nombre)
+                .HasMaxLength(200)
                 .IsUnicode(false);
         });
 
@@ -239,6 +277,18 @@ public partial class AppDbContext : DbContext
 
             entity.Property(e => e.Nombre)
                 .HasMaxLength(100)
+                .IsUnicode(false);
+        });
+
+        modelBuilder.Entity<ListaOrdenEscrituracion>(entity =>
+        {
+            entity
+                .HasNoKey()
+                .ToView("ListaOrdenEscrituracion");
+
+            entity.Property(e => e.FechaRadicado).HasColumnType("datetime");
+            entity.Property(e => e.Proyecto)
+                .HasMaxLength(200)
                 .IsUnicode(false);
         });
 
@@ -578,7 +628,14 @@ public partial class AppDbContext : DbContext
         {
             entity.HasKey(e => e.IdRadicado).HasFillFactor(90);
 
+            entity.Property(e => e.FechaOe)
+                .HasColumnType("datetime")
+                .HasColumnName("FechaOE");
             entity.Property(e => e.FechaRadicado).HasColumnType("datetime");
+
+            entity.HasOne(d => d.IdEstadoNavigation).WithMany(p => p.Radicados)
+                .HasForeignKey(d => d.IdEstado)
+                .HasConstraintName("FK_Radicados_TiposEstadoRadicado");
 
             entity.HasOne(d => d.Plantilla).WithMany(p => p.Radicados)
                 .HasForeignKey(d => d.PlantillaId)
@@ -671,6 +728,50 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.IdTipoOtorgante)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_ROT_TiposOtorgantes");
+        });
+
+        modelBuilder.Entity<RadicadosPago>(entity =>
+        {
+            entity.HasKey(e => e.IdRadicadoPagos);
+
+            entity.Property(e => e.AhorroEntidad)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.AhorroValor).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.CesantiasEntidad)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.CesantiasValor).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.CreditoEntidad)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.CreditoValor).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.CuotaInicial).HasColumnType("decimal(18, 4)");
+            entity.Property(e => e.SubsidioEntidad)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+            entity.Property(e => e.SubsidioValor).HasColumnType("decimal(12, 2)");
+            entity.Property(e => e.ValorAnticipoSubsudio).HasColumnType("decimal(18, 4)");
+            entity.Property(e => e.ValorCredito).HasColumnType("decimal(18, 4)");
+            entity.Property(e => e.ValorEscritura).HasColumnType("decimal(18, 4)");
+            entity.Property(e => e.ValorInmueble).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.ValorSubsidioCc)
+                .HasColumnType("decimal(18, 4)")
+                .HasColumnName("ValorSubsidioCC");
+            entity.Property(e => e.ValorSubsidioIndexacion).HasColumnType("decimal(18, 4)");
+            entity.Property(e => e.ValorSubsidioSh)
+                .HasColumnType("decimal(18, 4)")
+                .HasColumnName("ValorSubsidioSH");
+            entity.Property(e => e.ValorVenta).HasColumnType("decimal(18, 4)");
+
+            entity.HasOne(d => d.IdCajaCompensacionNavigation).WithMany(p => p.RadicadosPagos)
+                .HasForeignKey(d => d.IdCajaCompensacion)
+                .HasConstraintName("FK_RadicadosPagos_CajasCompensacion");
+
+            entity.HasOne(d => d.IdRadicadoNavigation).WithMany(p => p.RadicadosPagos)
+                .HasForeignKey(d => d.IdRadicado)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Radicados_RadicadosPagos");
         });
 
         modelBuilder.Entity<RegexPattern>(entity =>
@@ -914,6 +1015,7 @@ public partial class AppDbContext : DbContext
                 .HasFillFactor(90);
 
             entity.Property(e => e.Activo).HasDefaultValue(true);
+            entity.Property(e => e.Consecutivo).HasDefaultValue(false);
             entity.Property(e => e.CodigoNotaria)
                 .HasMaxLength(20)
                 .IsUnicode(false);
@@ -1019,6 +1121,8 @@ public partial class AppDbContext : DbContext
 
             entity.ToTable("TiposEstadoCivil");
 
+            entity.HasIndex(e => e.Codigo, "IX_TiposEstadoCivil_Codigo").IsUnique();
+
             entity.Property(e => e.Codigo)
                 .HasMaxLength(50)
                 .IsUnicode(false);
@@ -1026,6 +1130,21 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(300)
                 .IsUnicode(false);
             entity.Property(e => e.EstadoCivil)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+        });
+
+        modelBuilder.Entity<TiposEstadoRadicado>(entity =>
+        {
+            entity.HasKey(e => e.IdEstadoRadicado);
+
+            entity.ToTable("TiposEstadoRadicado");
+
+            entity.Property(e => e.IdEstadoRadicado).ValueGeneratedNever();
+            entity.Property(e => e.Codigo)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+            entity.Property(e => e.Descripcion)
                 .HasMaxLength(50)
                 .IsUnicode(false);
         });
@@ -1152,7 +1271,7 @@ public partial class AppDbContext : DbContext
                 .ToView("vInmueblesMinuta");
 
             entity.Property(e => e.InmuebleBlCoeficiente)
-                .HasColumnType("decimal(18, 4)")
+                .HasMaxLength(4000)
                 .HasColumnName("InmuebleBL.Coeficiente");
             entity.Property(e => e.InmuebleBlCoeficienteLetras)
                 .IsUnicode(false)

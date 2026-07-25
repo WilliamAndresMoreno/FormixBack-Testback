@@ -25,7 +25,7 @@ public partial class VInmueblesMinutum
 
     public string? InmuebleBlValorLetras { get; set; }
 
-    public decimal? InmuebleBlCoeficiente { get; set; }
+    public string? InmuebleBlCoeficiente { get; set; }
 
     public string? InmuebleBlCoeficienteLetras { get; set; }
 

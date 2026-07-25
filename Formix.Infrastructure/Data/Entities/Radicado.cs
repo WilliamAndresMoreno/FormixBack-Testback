@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Formix.Infrastructure.Data.Entities;
@@ -15,9 +15,15 @@ public partial class Radicado
 
     public int UsuarioId { get; set; }
 
-    public int Consecutivo { get; set; }
+    public string? Consecutivo { get; set; }
 
-    public DateTime FechaRadicado { get; set; }
+    public DateTime? FechaRadicado { get; set; }
+
+    public DateTime? FechaOe { get; set; }
+
+    public int? IdEstado { get; set; }
+
+    public virtual TiposEstadoRadicado? IdEstadoNavigation { get; set; }
 
     public virtual ProyectoPlantilla? Plantilla { get; set; }
 
@@ -28,4 +34,6 @@ public partial class Radicado
     public virtual ICollection<RadicadosInmueble> RadicadosInmuebles { get; set; } = new List<RadicadosInmueble>();
 
     public virtual ICollection<RadicadosOtorgante> RadicadosOtorgantes { get; set; } = new List<RadicadosOtorgante>();
+
+    public virtual ICollection<RadicadosPago> RadicadosPagos { get; set; } = new List<RadicadosPago>();
 }
