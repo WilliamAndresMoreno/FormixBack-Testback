@@ -41,6 +41,8 @@ public static class PermissionCodes
     public const string EditarRadicados = "EDITAR_RADICADOS";
     public const string EliminarRadicados = "ELIMINAR_RADICADOS";
     public const string CargarPdfRadicado = "CARGAR_PDF_RADICADO";
+    public const string CrearPago = "CREAR_PAGO";
+    public const string VerEscrituracion = "VER_ESCRITURACION";
 
     // Terceros
     public const string VerTerceros = "VER_TERCEROS";

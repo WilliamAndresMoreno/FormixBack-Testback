@@ -4,10 +4,10 @@ namespace Formix.Api.Authorization;
 
 public class PermissionRequirement : IAuthorizationRequirement
 {
-    public PermissionRequirement(string permissionCode)
+    public PermissionRequirement(string[] permissionCodes)
     {
-        PermissionCode = permissionCode;
+        PermissionCodes = permissionCodes;
     }
 
-    public string PermissionCode { get; }
+    public string[] PermissionCodes { get; }
 }

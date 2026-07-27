@@ -29,7 +29,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tercero
         [HttpGet]
-        [RequirePermission(PermissionCodes.VerTerceros)]
+        [RequirePermission(PermissionCodes.VerTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<TerceroDto>>> GetTerceros()
         {
             try
@@ -56,7 +56,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tercero/5
         [HttpGet("{id}")]
-        [RequirePermission(PermissionCodes.VerTerceros)]
+        [RequirePermission(PermissionCodes.VerTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<TerceroDto>> GetTercero(int id)
         {
             try
@@ -81,7 +81,7 @@ namespace Formix.Api.Controllers
 
         // POST: api/tercero
         [HttpPost]
-        [RequirePermission(PermissionCodes.CrearTerceros)]
+        [RequirePermission(PermissionCodes.CrearTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<TerceroDto>> PostTercero([FromBody] TerceroDto terceroDto)
         {
             try
@@ -130,7 +130,7 @@ namespace Formix.Api.Controllers
 
         // PUT: api/tercero/5
         [HttpPut("{id}")]
-        [RequirePermission(PermissionCodes.EditarTerceros)]
+        [RequirePermission(PermissionCodes.EditarTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> PutTercero(int id, [FromBody] TerceroDto terceroDto)
         {
             var tenantId = _tenant.TenantId;
@@ -198,7 +198,7 @@ namespace Formix.Api.Controllers
 
         // DELETE: api/tercero/5
         [HttpDelete("{id}")]
-        [RequirePermission(PermissionCodes.EliminarTerceros)]
+        [RequirePermission(PermissionCodes.EliminarTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> DeleteTercero(int id)
         {
             try
@@ -230,7 +230,7 @@ namespace Formix.Api.Controllers
         }
 
         [HttpGet("buscar")]
-        [RequirePermission(PermissionCodes.VerTerceros)]
+        [RequirePermission(PermissionCodes.VerTerceros, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> Buscar(string term)
         {
             try
@@ -238,8 +238,14 @@ namespace Formix.Api.Controllers
                 if (string.IsNullOrWhiteSpace(term))
                     return BadRequest("Debe enviar término de búsqueda");
 
+                var tenantId = _tenant.TenantId;
+                if (tenantId <= 0)
+                {
+                    return Unauthorized("Tenant no definido");
+                }
+
                 var result = await _context.ListaTerceros
-                    .Where(t => (t.NombreCompleto != null && t.NombreCompleto.Contains(term)) || (t.NumeroDocumento != null && t.NumeroDocumento.Contains(term)))
+                    .Where(t => t.TenantId == tenantId && ((t.NombreCompleto != null && t.NombreCompleto.Contains(term)) || (t.NumeroDocumento != null && t.NumeroDocumento.Contains(term))))
                     .ToListAsync();
                 return Ok(_mapper.Map<IEnumerable<ListaOtorganteDto>>(result));
             }

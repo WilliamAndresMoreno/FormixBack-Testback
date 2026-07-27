@@ -244,7 +244,7 @@ namespace Formix.API.Controllers
         }
 
         [HttpGet("{numeroRadicado}/archivo/numeroradicado")]
-        public async Task<IActionResult> DescargarArchivoPorNumeroRadicado(int numeroRadicado)
+        public async Task<IActionResult> DescargarArchivoPorNumeroRadicado(string numeroRadicado)
         {
             try
             {

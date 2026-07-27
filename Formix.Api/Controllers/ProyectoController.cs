@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -31,7 +31,7 @@ namespace FormixBack.Controllers
 
         // GET: api/proyecto
         [HttpGet]
-        [RequirePermission(PermissionCodes.VerProyectos)]
+        [RequirePermission(PermissionCodes.VerProyectos, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<ProyectoDto>>> GetProyectos()
         {
             try

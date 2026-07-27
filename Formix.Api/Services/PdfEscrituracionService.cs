@@ -376,6 +376,7 @@ public class PdfEscrituracionService
         KR|
         CALLE|
         recepcion|
+Pasaporte|
         \d|
         \(
     )
@@ -400,7 +401,7 @@ public class PdfEscrituracionService
                     string lineaTrim = linea.Trim();
 
                     // Si la línea contiene NIT, C.C., etc., detenerse
-                    if (Regex.IsMatch(lineaTrim, @"^(NIT |NIT|NIIT|N\.I\.T\.|C\.C\.|CL |KR |CALLE |recepcion)"))
+                    if (Regex.IsMatch(lineaTrim, @"^(NIT |NIT|NIIT|N\.I\.T\.|C\.C\.|CL |KR |CALLE |recepcion|Pasaporte)"))
                     {
                         //// Extraer documento (C.C.)
                         //var docMatch = Regex.Match(seccionOtorgantes, @"C\.C\.\s*(\d[\d\.]*)");
@@ -428,7 +429,8 @@ public class PdfEscrituracionService
 
                     // Filtrar por longitud mínima y excluir ciertos patrones
                     if (nombreCompleto.Length >= 5 &&
-                        !nombreCompleto.Contains("VINCULADOS") &&
+                        !nombreCompleto.Contains("VINCULADOS", StringComparison.OrdinalIgnoreCase) &&
+                        !nombreCompleto.Contains("SIN INFORMACION", StringComparison.OrdinalIgnoreCase) &&
                         !nombreCompleto.Contains("Datos de contacto"))
                     {
                         // Extraer documento (C.C.)
@@ -598,8 +600,9 @@ public class PdfEscrituracionService
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(Regex.Escape);
 
-        // Permite espacios, tabs y saltos de línea entre palabras
-        return string.Join(@"[\s\r\n]+", palabras);
+        return @"(?m)^" +
+               string.Join(@"\s+", palabras) +
+               @"\s*$";
     }
 
 
@@ -757,7 +760,7 @@ public class PdfEscrituracionService
         // Extraer documento (C.C.)
         var docMatch = Regex.Match(
     textoCompleto,
-    @"\b(C\.C\.|N\.I\.T\.|CC|NIT|NIIT)\s*(\d[\d\.]*)",
+    @"\b(C\.C\.|N\.I\.T\.|CC|NIT|NIIT|Pasaporte)\s*(\d[\d\.]*)",
     RegexOptions.IgnoreCase
 );
 
@@ -784,7 +787,7 @@ public class PdfEscrituracionService
                 continue;
 
             // descartar documentos, estado civil, correos, roles, teléfonos
-            if (Regex.IsMatch(l, @"\b(C\.C\.|NIT|NIIT)\b", RegexOptions.IgnoreCase)) continue;
+            if (Regex.IsMatch(l, @"\b(C\.C\.|NIT|NIIT|Pasaporte)\b", RegexOptions.IgnoreCase)) continue;
             if (Regex.IsMatch(l, @"(Solter[oa]|Casad[oa])", RegexOptions.IgnoreCase)) continue;
             if (Regex.IsMatch(l, @"@")) continue;
             if (Regex.IsMatch(l, @"^\(?\s*(Otorgantes|

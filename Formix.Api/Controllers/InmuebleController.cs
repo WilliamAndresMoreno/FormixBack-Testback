@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -66,7 +66,7 @@ namespace FormixBack.Controllers
 
         // GET: api/inmueble/5
         [HttpGet("byProyecto/{idProyecto}")]
-        [RequirePermission(PermissionCodes.VerInmuebles)]
+        [RequirePermission(PermissionCodes.VerInmuebles, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<InmuebleDto>>> GetInmuebleByProyecto(int idProyecto)
         {
             try
@@ -87,7 +87,7 @@ namespace FormixBack.Controllers
 
         // GET: api/inmueble/byProyecto/paged/5?page=1&pageSize=50
         [HttpGet("byProyecto/paged/{idProyecto}")]
-        [RequirePermission(PermissionCodes.VerInmuebles)]
+        [RequirePermission(PermissionCodes.VerInmuebles, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> GetInmuebleByProyectoPaged(int idProyecto, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, string filter = "")
         {
             try
@@ -380,7 +380,7 @@ namespace FormixBack.Controllers
 
         // GET: api/inmueble/5
         [HttpGet("{id}")]
-        [RequirePermission(PermissionCodes.VerInmuebles)]
+        [RequirePermission(PermissionCodes.VerInmuebles, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<InmuebleDto>> GetInmueble(int id)
         {
             try

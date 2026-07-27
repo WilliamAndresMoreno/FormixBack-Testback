@@ -27,7 +27,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tipootorgante
         [HttpGet]
-        [RequirePermission(PermissionCodes.VerCatalogos)]
+        [RequirePermission(PermissionCodes.VerCatalogos, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<TiposOtorganteDto>>> GetTiposOtorgante()
         {
             var lista = await _context.TiposOtorgantes
@@ -40,7 +40,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tipootorgante/5
         [HttpGet("{id}")]
-        [RequirePermission(PermissionCodes.VerCatalogos)]
+        [RequirePermission(PermissionCodes.VerCatalogos, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<TiposOtorganteDto>> GetTipoOtorgante(int id)
         {
             var entity = await _context.TiposOtorgantes.FindAsync(id);

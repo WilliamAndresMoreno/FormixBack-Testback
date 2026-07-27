@@ -9,8 +9,8 @@ public class RequirePermissionAttribute : AuthorizeAttribute
 {
     public const string PolicyPrefix = "Permission:";
 
-    public RequirePermissionAttribute(string permissionCode)
+    public RequirePermissionAttribute(params string[] permissionCodes)
     {
-        Policy = PolicyPrefix + permissionCode;
+        Policy = PolicyPrefix + string.Join(",", permissionCodes);
     }
 }

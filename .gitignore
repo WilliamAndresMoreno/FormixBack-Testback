@@ -1,0 +1,40 @@
+# Archivos temporales de Visual Studio
+.vs/
+*.user
+*.suo
+
+# Binarios y builds
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+
+# Archivos de configuración local
+*.dbmdl
+*.jfm
+*.aps
+*.ncb
+*.opendb
+*.pdb
+*.cache
+*.dll
+*.exe
+
+# Configuración de usuario
+*.vcxproj.user
+*.csproj.user
+*.rsuser
+
+# Otros
+*.swp
+*.tmp
+*.bak
+*.vsidx
+
+
+# Carpetas Release
+Release/
+*/Release/
+
+# wwwroot dentro de Formix.Api
+Formix.Api/wwwroot/

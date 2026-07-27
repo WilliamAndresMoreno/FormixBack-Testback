@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Formix.Infrastructure.ExternalServices; // Servicios de integración con MayasoftAPI
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -84,10 +85,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddScoped<PdfEscrituracionService>();
+builder.Services.AddScoped<PdfGeneratorService>();
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IUserAuthorizationService, UserAuthorizationService>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+
+// Registro de la integración con MayasoftAPI: configuración, cliente HTTP, servicio de sincronización y tarea programada
+builder.Services.Configure<MayasoftApiOptions>(builder.Configuration.GetSection("MayasoftApi"));
+builder.Services.AddHttpClient<IMayasoftApiClient, MayasoftApiClient>();
+builder.Services.AddScoped<IMayasoftSyncService, MayasoftSyncService>();
+builder.Services.AddHostedService<MayasoftSyncBackgroundService>();
 
 var app = builder.Build();
 

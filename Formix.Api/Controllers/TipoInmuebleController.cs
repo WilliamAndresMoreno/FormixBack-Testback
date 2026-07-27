@@ -27,7 +27,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tipoinmueble
         [HttpGet]
-        [RequirePermission(PermissionCodes.VerCatalogos)]
+        [RequirePermission(PermissionCodes.VerCatalogos, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<TipoInmuebleDto>>> GetTiposInmueble()
         {
             try
@@ -48,7 +48,7 @@ namespace Formix.Api.Controllers
 
         // GET: api/tipoinmueble/5
         [HttpGet("{id}")]
-        [RequirePermission(PermissionCodes.VerCatalogos)]
+        [RequirePermission(PermissionCodes.VerCatalogos, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<TipoInmuebleDto>> GetTipoInmueble(int id)
         {
             try

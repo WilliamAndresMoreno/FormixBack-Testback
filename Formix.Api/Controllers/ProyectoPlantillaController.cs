@@ -456,9 +456,9 @@ namespace Formix.API.Controllers
         }
 
         // GET api/proyectoplantilla/radicado/numero/{numeroRadicado}/archivo
-        [HttpGet("radicado/numero/{numeroRadicado:int}/archivo")]
+        [HttpGet("radicado/numero/{numeroRadicado}/archivo")]
         [RequirePermission(PermissionCodes.VerPlantillas)]
-        public async Task<IActionResult> DescargarArchivoPorNumeroRadicado(int numeroRadicado)
+        public async Task<IActionResult> DescargarArchivoPorNumeroRadicado(string numeroRadicado)
         {
             try
             {

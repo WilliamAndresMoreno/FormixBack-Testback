@@ -11,6 +11,9 @@ namespace Formix.API.Mappings
             // Proyecto -> ProyectoDto
             CreateMap<Proyecto, ProyectoDto>().ReverseMap();
 
+            CreateMap<RadicadosPago, RadicadosPagoDto>().ReverseMap();
+            CreateMap<RadicadosPagoDto, RadicadosPago>().ReverseMap();
+
             // Inmueble -> InmuebleDto
             CreateMap<Inmueble, InmuebleDto>()
                 .ForMember(d => d.TipoInmuebleNombre, opt => opt.MapFrom(s => s.TipoInmueble != null ? s.TipoInmueble.Nombre : null));
@@ -75,6 +78,9 @@ namespace Formix.API.Mappings
 
             // Radicados -> DTOs
             CreateMap<ListaRadicado, RadicadoDto>().ReverseMap();
+            CreateMap<ListaOrdenEscrituracion, RadicadoDto>().ReverseMap();
+            CreateMap<ListaOrdenEscrituracion, ListaOrdenEscrituracionDto>().ReverseMap();
+            CreateMap<ListaOrdenEscrituracionDto, ListaOrdenEscrituracion>().ReverseMap();
             CreateMap<ListaRadicado, ListaRadicadoDto>().ReverseMap();
             CreateMap<RadicadoDto, ListaRadicado>().ReverseMap();
             CreateMap<ListaRadicadoDto, ListaRadicado>().ReverseMap();

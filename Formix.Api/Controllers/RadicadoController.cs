@@ -46,7 +46,7 @@ namespace FormixBack.Controllers
                 }
 
                 var lista = await _context.ListaRadicados.Where(p => p.TenantId == tenantId)
-                    //.OrderByDescending(r => r.IdRadicado)
+                    .OrderByDescending(r => r.Consecutivo)
                     .ToListAsync();
                 return Ok(_mapper.Map<List<RadicadoDto>>(lista));
             }
@@ -56,9 +56,32 @@ namespace FormixBack.Controllers
             }
         }
 
-        // GET: api/radicado/5
+        // GET: api/ordenescrituracion
+        [HttpGet("ordenes_escrituracion")]
+        [RequirePermission(PermissionCodes.VerEscrituracion)]
+        public async Task<ActionResult<IEnumerable<RadicadoDto>>> GetListaOrdenEscrituracion()
+        {
+            try
+            {
+                var tenantId = _tenant.TenantId;
+                if (_tenant.TenantId <= 0)
+                {
+                    return Unauthorized("Tenant no definido");
+                }
+
+                var lista = await _context.ListaOrdenEscrituracions.Where(p => p.TenantId == tenantId)
+                    .OrderByDescending(r => r.IdRadicado)
+                    .ToListAsync();
+                return Ok(_mapper.Map<List<RadicadoDto>>(lista));
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
         [HttpGet("{id}")]
-        [RequirePermission(PermissionCodes.VerRadicados)]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<RadicadoDto>> GetRadicado(int id)
         {
             try
@@ -74,9 +97,213 @@ namespace FormixBack.Controllers
             }
         }
 
+        // GET: api/radicado/5/pdf
+        [HttpGet("{id}/pdf")]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
+        public async Task<IActionResult> DownloadPdf(int id, [FromServices] Formix.Api.Services.PdfGeneratorService pdfService)
+        {
+            try
+            {
+                // Cargar datos
+                var radicado = await _context.Radicados
+                    .Include(r => r.Proyecto)
+                    .Include(r => r.RadicadosOtorgantes)
+                        .ThenInclude(ro => ro.IdTerceroNavigation)
+                    .Include(r => r.RadicadosOtorgantes)
+                        .ThenInclude(ro => ro.RadicadosOtorgantesTipos)
+                            .ThenInclude(rot => rot.IdTipoOtorganteNavigation)
+                    .Include(r => r.RadicadosInmuebles)
+                        .ThenInclude(ri => ri.IdInmuebleNavigation)
+                            .ThenInclude(i => i.TipoInmueble)
+                    .Include(r => r.RadicadosPagos)
+                        .ThenInclude(rp => rp.IdCajaCompensacionNavigation)
+                    .FirstOrDefaultAsync(r => r.IdRadicado == id);
+
+                if (radicado == null) return NotFound("Radicado no encontrado.");
+
+                // Leer HTML
+                var templatePath = Path.Combine(AppContext.BaseDirectory, "Templates", "OrdenEscrituracionTemplate.html");
+                var html = await System.IO.File.ReadAllTextAsync(templatePath);
+
+                // Ocultar logo por defecto (si luego se quiere enviar por parámetro)
+                html = html.Replace("{{LogoUrl}}", "");
+                html = html.Replace("{{DisplayLogoImage}}", "none");
+                html = html.Replace("{{DisplayLogo}}", "none");
+
+                // Fechas
+                html = html.Replace("{{FechaOE}}", (radicado.FechaOe ?? radicado.FechaRadicado)?.ToString("dd/MM/yyyy") ?? "");
+
+                // Cargar catálogos para mapeos en memoria
+                var municipioCodes = radicado.RadicadosOtorgantes
+                    .Select(ro => ro.IdTerceroNavigation?.LugarExpedicionMunicipioCodigoDane)
+                    .Where(code => !string.IsNullOrEmpty(code))
+                    .Distinct()
+                    .ToList();
+
+                var municipiosMap = await _context.Municipios
+                    .Include(m => m.CodigoDepartamentoNavigation)
+                    .Where(m => municipioCodes.Contains(m.CodigoDane))
+                    .ToDictionaryAsync(m => m.CodigoDane, m => m);
+
+                var estadoCivilIds = radicado.RadicadosOtorgantes
+                    .Select(ro => ro.IdTerceroNavigation?.IdEstadoCivil)
+                    .Where(id => id.HasValue)
+                    .Distinct()
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                var estadoCivilMap = await _context.TiposEstadoCivils
+                    .Where(ec => estadoCivilIds.Contains(ec.IdEstadoCivil))
+                    .ToDictionaryAsync(ec => ec.IdEstadoCivil, ec => string.IsNullOrWhiteSpace(ec.Descripcion) ? ec.EstadoCivil : $"{ec.EstadoCivil} ({ec.Descripcion})");
+
+                // Otorgantes dinámicos
+                var clientesHtml = new System.Text.StringBuilder();
+                foreach (var ro in radicado.RadicadosOtorgantes)
+                {
+                    var c = ro.IdTerceroNavigation;
+                    if (c == null) continue;
+
+                    var tipoOtorganteRel = ro.RadicadosOtorgantesTipos.FirstOrDefault();
+                    var tipoNombre = tipoOtorganteRel?.IdTipoOtorganteNavigation?.Nombre ?? "Cliente";
+                    var porcentajeVal = tipoOtorganteRel?.Porcentaje;
+                    var porcentajeStr = porcentajeVal.HasValue ? $"{porcentajeVal.Value:0.#}%" : "-";
+
+                    var estadoCivilStr = "-";
+                    if (c.IdEstadoCivil.HasValue && estadoCivilMap.TryGetValue(c.IdEstadoCivil.Value, out var ecNombre))
+                    {
+                        estadoCivilStr = ecNombre;
+                    }
+
+                    var expedicionStr = "-";
+                    var deptoStr = "";
+                    if (!string.IsNullOrEmpty(c.LugarExpedicionMunicipioCodigoDane) && 
+                        municipiosMap.TryGetValue(c.LugarExpedicionMunicipioCodigoDane, out var munEntity))
+                    {
+                        expedicionStr = munEntity.NombreMunicipio;
+                        deptoStr = $" ({munEntity.CodigoDepartamentoNavigation?.NombreDepartamento ?? ""})";
+                    }
+
+                    clientesHtml.Append($@"
+                    <div class=""info-block"" style=""margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;"">
+                      <div class=""info-row"">
+                        <div class=""info-label"">{tipoNombre.ToUpper()}:</div>
+                        {c.NombreCompleto} <span class=""info-label"" style=""margin-left: 15px"">Participación</span> {porcentajeStr}
+                      </div>
+                      <div class=""info-row"">
+                        <div class=""info-label"">C.C. No.</div>
+                        {c.Documento ?? "-"} <span class=""info-label"" style=""margin-left: 10px"">de</span> {expedicionStr}{deptoStr}
+                      </div>
+                      <div class=""info-row"">
+                        <div class=""info-label"">ESTADO CIVIL:</div>
+                        {estadoCivilStr}
+                      </div>
+                      <div class=""info-row"" style=""margin-top: 5px"">
+                        <div class=""info-label"">Correo electrónico:</div>
+                        {c.Correo ?? "-"} <span class=""info-label"" style=""margin-left: 20px"">Celular:</span> {c.Celular ?? "-"}
+                      </div>
+                    </div>");
+                }
+                if (clientesHtml.Length == 0)
+                {
+                    clientesHtml.Append(@"<div class=""info-row""><div class=""info-label"">CLIENTE:</div>-</div>");
+                }
+
+                html = html.Replace("{{ClientesHtml}}", clientesHtml.ToString());
+
+                // Inmuebles dinámicos
+                var inmueblesHtml = new System.Text.StringBuilder();
+                foreach (var ri in radicado.RadicadosInmuebles)
+                {
+                    var inm = ri.IdInmuebleNavigation;
+                    if (inm == null) continue;
+
+                    var tipoInmueble = inm.TipoInmueble?.Nombre ?? "Inmueble";
+
+                    inmueblesHtml.Append($@"
+                    <div style=""margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 5px;"">
+                      <div class=""info-row"">
+                        <div class=""info-label"">{tipoInmueble.ToUpper()}:</div>
+                        {inm.Nombre ?? "-"}
+                      </div>
+                      <div class=""info-row"">
+                        <div class=""info-label"">MATRICULA:</div>
+                        {inm.MatriculaInmobiliaria ?? "-"}
+                      </div>
+                    </div>");
+                }
+                if (inmueblesHtml.Length == 0)
+                {
+                    inmueblesHtml.Append(@"<div class=""info-row""><div class=""info-label"">INMUEBLE:</div>-</div>");
+                }
+
+                html = html.Replace("{{InmueblesHtml}}", inmueblesHtml.ToString());
+
+                // Pagos
+                var pago1 = radicado.RadicadosPagos.FirstOrDefault();
+                var ci = new System.Globalization.CultureInfo("es-CO");
+
+                Func<decimal?, string> formatMoney = (val) => {
+                    return val.HasValue ? val.Value.ToString("C0", ci) : "$ 0";
+                };
+
+                html = html.Replace("{{ValorVenta}}", formatMoney(pago1?.ValorVenta));
+                html = html.Replace("{{ValorEscritura}}", formatMoney(pago1?.ValorEscritura));
+                html = html.Replace("{{CuotaInicial}}", formatMoney(pago1?.CuotaInicial));
+                html = html.Replace("{{CajaCompensacion}}", !string.IsNullOrEmpty(pago1?.IdCajaCompensacionNavigation?.Nombre) ? pago1.IdCajaCompensacionNavigation.Nombre : "-");
+                html = html.Replace("{{ValorSubsidioCaja}}", formatMoney(pago1?.ValorSubsidioCc));
+                html = html.Replace("{{CajaHabitat}}", !string.IsNullOrEmpty(pago1?.SubsidioEntidad) ? pago1.SubsidioEntidad : "-");
+                html = html.Replace("{{ValorSubsidioHabitat}}", formatMoney(pago1?.ValorSubsidioSh));
+                html = html.Replace("{{ValorAnticipoSubsidio}}", formatMoney(pago1?.ValorAnticipoSubsudio));
+                html = html.Replace("{{ValorSubsidioIndexacion}}", formatMoney(pago1?.ValorSubsidioIndexacion));
+                html = html.Replace("{{BancoCredito}}", !string.IsNullOrEmpty(pago1?.CreditoEntidad) ? pago1.CreditoEntidad : "-");
+                html = html.Replace("{{ValorCredito}}", formatMoney(pago1?.ValorCredito));
+
+                // Footer
+                html = html.Replace("{{Observaciones}}", "Y/O");
+                html = html.Replace("{{Elaboro}}", "Sistema Formix");
+                html = html.Replace("{{FechaElaboracion}}", DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss"));
+                html = html.Replace("{{TextoFooter}}", "");
+
+                var pdfBytes = await pdfService.GenerarPdfDesdeHtmlAsync(html);
+                return File(pdfBytes, "application/pdf", $"OrdenEscrituracion_{id}.pdf");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al generar el PDF: {ex.Message}");
+            }
+        }
+
+        private async Task<string> GenerateAutoConsecutivo(int tenantId)
+        {
+            var colombiaZone = TimeZoneInfo.FindSystemTimeZoneById("SA Pacific Standard Time");
+            var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, colombiaZone);
+            string prefix = localTime.ToString("yyyyMMdd");
+
+            var todayConsecutivos = await _context.Radicados
+                .Where(r => r.TenantId == tenantId && r.Consecutivo.StartsWith(prefix))
+                .Select(r => r.Consecutivo)
+                .ToListAsync();
+
+            int nextNum = 1;
+            if (todayConsecutivos.Any())
+            {
+                var numbers = todayConsecutivos
+                    .Select(c => {
+                        string lastPart = c.Substring(prefix.Length);
+                        return int.TryParse(lastPart, out int num) ? num : 0;
+                    })
+                    .ToList();
+                if (numbers.Any())
+                {
+                    nextNum = numbers.Max() + 1;
+                }
+            }
+            return $"{prefix}{nextNum}";
+        }
+
         // POST: api/radicado
         [HttpPost]
-        [RequirePermission(PermissionCodes.CrearRadicados)]
+        [RequirePermission(PermissionCodes.CrearRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<RadicadoDto>> PostRadicado(RadicadoDto dto)
         {
             try
@@ -85,11 +312,27 @@ namespace FormixBack.Controllers
                 {
                     dto.IdRadicado = null;
                 }
+
+                var tenantId = _tenant.TenantId;
+                dto.TenantId = tenantId;
+
+                var tenant = await _context.Tenants.FindAsync(tenantId);
+                if (tenant != null && tenant.Consecutivo == true && dto.IdEstado == 1)
+                {
+                    dto.Consecutivo = await GenerateAutoConsecutivo(tenantId);
+                }
+
+                if (dto.IdEstado == 1)
+                {
+                    bool exists = await _context.Radicados.AnyAsync(r => r.ProyectoId == dto.ProyectoId && r.Consecutivo == dto.Consecutivo && r.IdEstado == 1);
+                    if (exists) return BadRequest("Ya existe un Radicado con ese consecutivo para este proyecto.");
+                }
+
                 var entity = _mapper.Map<Radicado>(dto);
                 _context.Radicados.Add(entity);
                 await _context.SaveChangesAsync();
                 var created = _mapper.Map<RadicadoDto>(entity);
-                return CreatedAtAction(nameof(GetRadicado), new { id = created.IdRadicado }, created);
+                return Ok(created);
             }
             catch (DbUpdateException ex)
             {
@@ -103,12 +346,28 @@ namespace FormixBack.Controllers
 
         // PUT: api/radicado/5
         [HttpPut("{id}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> PutRadicado(int id, RadicadoDto dto)
         {
             if (id != dto.IdRadicado) return BadRequest();
+
+            var tenantId = _tenant.TenantId;
+            dto.TenantId = tenantId;
+
             var entity = await _context.Radicados.FindAsync(id);
             if (entity == null) return NotFound();
+
+            var tenant = await _context.Tenants.FindAsync(tenantId);
+            if (tenant != null && tenant.Consecutivo == true && dto.IdEstado == 1 && string.IsNullOrEmpty(entity.Consecutivo))
+            {
+                dto.Consecutivo = await GenerateAutoConsecutivo(tenantId);
+            }
+
+            if (dto.IdEstado == 1)
+            {
+                bool exists = await _context.Radicados.AnyAsync(r => r.ProyectoId == dto.ProyectoId && r.Consecutivo == dto.Consecutivo && r.IdEstado == 1 && r.IdRadicado != id);
+                if (exists) return BadRequest("Ya existe un Radicado con ese consecutivo para este proyecto.");
+            }
 
             _mapper.Map(dto, entity);
             _context.Entry(entity).State = EntityState.Modified;
@@ -124,12 +383,12 @@ namespace FormixBack.Controllers
             {
                 return StatusCode(500, $"Error actualizando el radicado: {ex.Message}");
             }
-            return NoContent();
+            return Ok(_mapper.Map<RadicadoDto>(entity));
         }
 
         // DELETE: api/radicado/5
         [HttpDelete("{id}")]
-        [RequirePermission(PermissionCodes.EliminarRadicados)]
+        [RequirePermission(PermissionCodes.EliminarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> DeleteRadicado(int id)
         {
             try
@@ -171,7 +430,7 @@ namespace FormixBack.Controllers
         // GET: api/radicado/{id}/actos
         [Authorize]
         [HttpGet("{id}/actos")]
-        [RequirePermission(PermissionCodes.VerRadicados)]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<RadicadosActoDto>>> GetActos(int id)
         {
             try
@@ -193,7 +452,7 @@ namespace FormixBack.Controllers
         // POST: api/radicado/{id}/actos
         [Authorize]
         [HttpPost("{id}/actos")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<RadicadosActoDto>> PostActo(int id, RadicadosActoDto dto)
         {
             if (id != dto.IdRadicado) return BadRequest();
@@ -220,7 +479,7 @@ namespace FormixBack.Controllers
         // PUT: api/radicado/{id}/actos/{idActo}
         [Authorize]
         [HttpPut("{id}/actos/{idActo}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> PutActo(int id, int idActo, RadicadosActoDto dto)
         {
             if (id != dto.IdRadicado || idActo != dto.IdActo) return BadRequest();
@@ -248,7 +507,7 @@ namespace FormixBack.Controllers
         // DELETE: api/radicado/{id}/actos/{idActo}
         [Authorize]
         [HttpDelete("{id}/actos/{idActo}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> DeleteActo(int id, int idActo)
         {
             try
@@ -274,7 +533,7 @@ namespace FormixBack.Controllers
         // ===== Subrecursos: Otorgantes =====
         // GET: api/radicado/{id}/otorgantes
         [HttpGet("{id}/otorgantes")]
-        [RequirePermission(PermissionCodes.VerRadicados)]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<ListaOtorganteDto>>> GetOtorgantes(int id)
         {
             try
@@ -293,7 +552,7 @@ namespace FormixBack.Controllers
         }
 
         [HttpGet("{id}/RadicadoOtorgantes")]
-        [RequirePermission(PermissionCodes.VerRadicados)]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<RadicadosOtorganteDto>>> GetRadicadoOtorgantes(int id)
         {
             try
@@ -314,7 +573,7 @@ namespace FormixBack.Controllers
 
         // POST: api/radicado/{id}/otorgantes
         [HttpPost("{id}/otorgantes")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<RadicadosOtorganteDto>> PostOtorgante(int id, RadicadosOtorganteDto dto)
         {
             if (id != dto.IdRadicado) return BadRequest();
@@ -323,15 +582,29 @@ namespace FormixBack.Controllers
                 var radicado = await _context.Radicados.FindAsync(id);
                 if (radicado == null) return NotFound();
 
-                var entity = _mapper.Map<RadicadosOtorgante>(dto);
-                _context.RadicadosOtorgantes.Add(entity);
-                await _context.SaveChangesAsync();
-                _context.RadicadosOtorgantesTipos.Add(new RadicadosOtorgantesTipo()
+                var entity = await _context.RadicadosOtorgantes
+                    .FirstOrDefaultAsync(x => x.IdRadicado == id && x.IdTercero == dto.IdTercero);
+
+                if (entity == null)
                 {
-                    IdRadicadoOtorgante = entity.IdRadicadoOtorgante,
-                    IdTipoOtorgante = dto.IdTipoOtorgante
-                });
-                await _context.SaveChangesAsync();
+                    entity = _mapper.Map<RadicadosOtorgante>(dto);
+                    _context.RadicadosOtorgantes.Add(entity);
+                    await _context.SaveChangesAsync();
+                }
+
+                var existingType = await _context.RadicadosOtorgantesTipos
+                    .FirstOrDefaultAsync(x => x.IdRadicadoOtorgante == entity.IdRadicadoOtorgante && x.IdTipoOtorgante == dto.IdTipoOtorgante);
+
+                if (existingType == null)
+                {
+                    _context.RadicadosOtorgantesTipos.Add(new RadicadosOtorgantesTipo()
+                    {
+                        IdRadicadoOtorgante = entity.IdRadicadoOtorgante,
+                        IdTipoOtorgante = dto.IdTipoOtorgante
+                    });
+                    await _context.SaveChangesAsync();
+                }
+
                 return Ok(_mapper.Map<RadicadosOtorganteDto>(entity));
             }
             catch (DbUpdateException ex)
@@ -346,10 +619,9 @@ namespace FormixBack.Controllers
 
         // PUT: api/radicado/{id}/radicadootorgantes
         [HttpPut("{id}/radicadootorgantes")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> PutOtorgante(int id, RadicadosOtorganteDto dto)
         {
-            // Validación correcta: si no coincide el id del radicado o el tercero no es válido
             if (id != dto.IdRadicado || dto.IdTercero <= 0) return BadRequest("Parámetros inválidos: id radicado o id tercero");
             try
             {
@@ -357,8 +629,18 @@ namespace FormixBack.Controllers
                     .FirstOrDefaultAsync(x => x.IdRadicado == id && x.IdTercero == dto.IdTercero);
                 if (entity == null) return NotFound();
 
-                var entity1 = await _context.RadicadosOtorgantesTipos
-                    .FirstOrDefaultAsync(x => x.IdRadicadoOtorgante == entity.IdRadicadoOtorgante);
+                var query = _context.RadicadosOtorgantesTipos
+                    .Where(x => x.IdRadicadoOtorgante == entity.IdRadicadoOtorgante);
+
+                RadicadosOtorgantesTipo entity1 = null;
+                if (dto.IdTipoOtorganteOriginal.HasValue && dto.IdTipoOtorganteOriginal > 0)
+                {
+                    entity1 = await query.FirstOrDefaultAsync(x => x.IdTipoOtorgante == dto.IdTipoOtorganteOriginal.Value);
+                }
+                else
+                {
+                    entity1 = await query.FirstOrDefaultAsync();
+                }
 
                 if (entity1 == null)
                 {
@@ -370,14 +652,13 @@ namespace FormixBack.Controllers
                 }
                 else
                 {
-                    // Actualizar únicamente el campo requerido
                     entity1.IdTipoOtorgante = dto.IdTipoOtorgante;
-                    _context.Entry(entity).State = EntityState.Modified;
+                    _context.Entry(entity1).State = EntityState.Modified;
                 }
                 await _context.SaveChangesAsync();
                 return Ok(_mapper.Map<RadicadosOtorganteDto>(entity));
             }
-            catch (DbUpdateConcurrencyException ex)
+            catch (DbUpdateConcurrencyException)
             {
                 return Conflict("Conflicto de concurrencia al actualizar otorgante del radicado");
             }
@@ -387,10 +668,10 @@ namespace FormixBack.Controllers
             }
         }
 
-        // DELETE: api/radicado/{id}/otorgantes/{idRadicadoOtorgante}
+        // DELETE: api/radicado/{id}/otorgantes/{idTercero}
         [HttpDelete("{id}/otorgantes/{idTercero}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
-        public async Task<IActionResult> DeleteOtorgante(int id, int idTercero)
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
+        public async Task<IActionResult> DeleteOtorgante(int id, int idTercero, [FromQuery] int? idTipoOtorgante = null)
         {
             try
             {
@@ -398,8 +679,28 @@ namespace FormixBack.Controllers
                     .FirstOrDefaultAsync(x => x.IdRadicado == id && x.IdTercero == idTercero);
                 if (entity == null) return NotFound();
 
-                _context.RadicadosOtorgantes.Remove(entity);
-                await _context.SaveChangesAsync();
+                if (idTipoOtorgante.HasValue && idTipoOtorgante > 0)
+                {
+                    var typeEntity = await _context.RadicadosOtorgantesTipos
+                        .FirstOrDefaultAsync(x => x.IdRadicadoOtorgante == entity.IdRadicadoOtorgante && x.IdTipoOtorgante == idTipoOtorgante.Value);
+                    if (typeEntity != null)
+                    {
+                        _context.RadicadosOtorgantesTipos.Remove(typeEntity);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    bool remains = await _context.RadicadosOtorgantesTipos.AnyAsync(x => x.IdRadicadoOtorgante == entity.IdRadicadoOtorgante);
+                    if (!remains)
+                    {
+                        _context.RadicadosOtorgantes.Remove(entity);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                else
+                {
+                    _context.RadicadosOtorgantes.Remove(entity);
+                    await _context.SaveChangesAsync();
+                }
                 return NoContent();
             }
             catch (DbUpdateException ex)
@@ -415,21 +716,26 @@ namespace FormixBack.Controllers
         // ===== Subrecursos: Inmuebles (asociaciones) =====
         // GET: api/radicado/{id}/inmuebles
         [HttpGet("{id}/inmuebles")]
-        [RequirePermission(PermissionCodes.VerRadicados)]
+        [RequirePermission(PermissionCodes.VerRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<ActionResult<IEnumerable<InmuebleDto>>> GetInmuebles(int id)
         {
             try
             {
-                var lista = await _context.ListaRadicadosInmuebles.Where(r => r.IdRadicado == id).ToListAsync();
-                //.Radicados
-                //.Include(r => r.RadicadosInmuebles)
-                //.ThenInclude(i => i.IdInmuebleNavigation)
-                //.ThenInclude(i => i.TipoInmueble)
-                //.FirstOrDefaultAsync(r => r.IdRadicado == id);
-                if (lista == null) return NotFound();
+                var radicadoInmuebles = await _context.RadicadosInmuebles
+                    .Include(ri => ri.IdInmuebleNavigation)
+                    .ThenInclude(i => i.TipoInmueble)
+                    .Where(ri => ri.IdRadicado == id)
+                    .ToListAsync();
 
-                //var lista = radicado.Where(i => i.ProyectoId == radicado.ProyectoId).ToList();
-                return Ok(_mapper.Map<List<InmuebleDto>>(lista));
+                if (radicadoInmuebles == null) return NotFound();
+
+                var lista = radicadoInmuebles.Select(ri => {
+                    var dto = _mapper.Map<InmuebleDto>(ri.IdInmuebleNavigation);
+                    dto.Orden = ri.Orden;
+                    return dto;
+                }).ToList();
+
+                return Ok(lista);
             }
             catch (Exception ex)
             {
@@ -439,7 +745,7 @@ namespace FormixBack.Controllers
 
         // POST: api/radicado/{id}/inmuebles/{inmuebleId}
         [HttpPost("{id}/inmuebles/{inmuebleId}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> AddInmueble(int id, int inmuebleId)
         {
             try
@@ -475,7 +781,7 @@ namespace FormixBack.Controllers
 
         // PUT: api/radicado/{id}/radicadoinmuebles
         [HttpPut("{id}/radicadoinmuebles")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> PutInmuebles(int id, RadicadosInmuebleDto dto)
         {
             // Validación correcta: si no coincide el id del radicado o el tercero no es válido
@@ -507,7 +813,7 @@ namespace FormixBack.Controllers
 
         // DELETE: api/radicado/{id}/inmuebles/{inmuebleId}
         [HttpDelete("{id}/inmuebles/{inmuebleId}")]
-        [RequirePermission(PermissionCodes.EditarRadicados)]
+        [RequirePermission(PermissionCodes.EditarRadicados, PermissionCodes.VerEscrituracion)]
         public async Task<IActionResult> RemoveInmueble(int id, int inmuebleId)
         {
             try

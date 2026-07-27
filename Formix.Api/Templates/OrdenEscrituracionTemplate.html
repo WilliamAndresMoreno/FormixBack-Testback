@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Orden de Escrituración</title>
+    <style>
+      body {
+          font-family: Arial, sans-serif;
+          font-size: 11px;
+          margin: 0;
+          padding: 0;
+          color: #000;
+      }
+
+      .header {
+          width: 100%;
+          margin-bottom: 20px;
+      }
+
+      .logo-container {
+          width: 100%;
+          text-align: center;
+          display: {{DisplayLogo}};
+          background-color: #f2f2f2;
+          padding: 10px 0;
+          margin-bottom: 20px;
+      }
+
+      .logo-container img {
+          max-height: 60px;
+      }
+
+      h2, h3 {
+          text-align: center;
+          margin: 10px 0;
+          font-size: 13px;
+          font-weight: bold;
+      }
+
+      .section-title {
+          text-align: center;
+          font-weight: bold;
+          margin-top: 15px;
+          margin-bottom: 10px;
+          font-size: 12px;
+      }
+
+      .info-block {
+          margin-bottom: 15px;
+          line-height: 1.4;
+      }
+
+      .info-row {
+          display: flex;
+          justify-content: flex-start;
+          margin-bottom: 3px;
+      }
+
+      .info-label {
+          font-weight: bold;
+          margin-right: 5px;
+      }
+
+      table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 15px;
+      }
+
+      table, th, td {
+          border: 1px solid black;
+      }
+
+      th, td {
+          padding: 6px;
+          text-align: left;
+      }
+
+      .td-value {
+          text-align: right;
+          width: 150px;
+      }
+
+      .checklist-table td {
+          padding: 4px;
+      }
+
+      .checklist-number {
+          width: 25px;
+          text-align: center;
+      }
+
+      .checklist-checkbox {
+          width: 25px;
+          text-align: center;
+          font-family: monospace;
+          font-size: 14px;
+      }
+
+      .footer {
+          margin-top: 20px;
+          line-height: 1.4;
+      }
+
+      .page-footer {
+          margin-top: 40px;
+          text-align: center;
+          font-size: 10px;
+          font-weight: bold;
+          border-top: 1px dashed #ccc;
+          padding-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="logo-container">
+        <!-- Si {{LogoUrl}} está vacío, controlaremos que el div entero tenga display:none desde C# -->
+        <img src="{{LogoUrl}}" alt="Logo" style="display: {{DisplayLogoImage}};" />
+      </div>
+      <h2>ORDEN DE ESCRITURA SUE NATURA</h2>
+      <div style="text-align: left; font-weight: bold; margin-top: 5px; margin-bottom: 10px;">FECHA DE ORDEN DE ESCRITURACIÓN: {{FechaOE}}</div>
+    </div>
+
+    <div class="section-title">DATOS DEL CLIENTE</div>
+    <div class="info-block">
+      {{ClientesHtml}}
+    </div>
+
+    <div class="section-title">DATOS DEL INMUEBLE: {{FechaOE}}</div>
+    <div class="info-block">
+      {{InmueblesHtml}}
+    </div>
+
+    <div class="section-title">PRECIO Y FORMA DE PAGO</div>
+    <table>
+      <tbody>
+        <tr>
+          <td><strong>VALOR DE LA VENTA</strong></td>
+          <td class="td-value">{{ValorVenta}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR DE LA ESCRITURA</strong></td>
+          <td class="td-value">{{ValorEscritura}}</td>
+        </tr>
+        <tr>
+          <td><strong>CUOTA INICIAL</strong></td>
+          <td class="td-value">{{CuotaInicial}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR DEL SUBSIDIO CAJA DE COMPENSACIÓN ( {{CajaCompensacion}} )</strong></td>
+          <td class="td-value">{{ValorSubsidioCaja}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR DEL SUBSIDIO SECRETARIA DEL HABITAT ( {{CajaHabitat}} )</strong></td>
+          <td class="td-value">{{ValorSubsidioHabitat}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR ANTICIPO DEL SUBSIDIO</strong></td>
+          <td class="td-value">{{ValorAnticipoSubsidio}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR SUBSIDIO INDEXACIÓN</strong></td>
+          <td class="td-value">{{ValorSubsidioIndexacion}}</td>
+        </tr>
+        <tr>
+          <td><strong>VALOR DEL CREDITO ( {{BancoCredito}} )</strong></td>
+          <td class="td-value">{{ValorCredito}}</td>
+        </tr>
+      </tbody>
+    </table>
+
+
+
+    <!-- <div class="section-title">LISTA CHEQUEO</div>
+    <table class="checklist-table">
+      <tbody>
+        <tr>
+          <td class="checklist-number">1.</td>
+          <td>Cédula de ciudadanía</td>
+          <td class="checklist-checkbox">X</td>
+          <td class="checklist-number">6.</td>
+          <td>Original carta de Subsidio</td>
+          <td class="checklist-checkbox">X</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>Pasaporte o Cédula Extranjería</td>
+          <td></td>
+          <td class="checklist-number">7.</td>
+          <td>Ajuste de subsidio</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>Registro Civil de Nacimiento</td>
+          <td></td>
+          <td class="checklist-number">8.</td>
+          <td>Resolución ministerio de vivienda</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>Poder especial o general y cedula del apoderado</td>
+          <td></td>
+          <td class="checklist-number">9.</td>
+          <td>Resolución secretaria de hábitat</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="checklist-number">2.</td>
+          <td>Original carta de Crédito</td>
+          <td class="checklist-checkbox">X</td>
+          <td class="checklist-number">10.</td>
+          <td>Paz y salvo de valorización IDU</td>
+          <td class="checklist-checkbox">X</td>
+        </tr>
+        <tr>
+          <td class="checklist-number">3.</td>
+          <td>Novedad crédito</td>
+          <td></td>
+          <td class="checklist-number">11.</td>
+          <td>Impuesto Predial</td>
+          <td class="checklist-checkbox">X</td>
+        </tr>
+        <tr>
+          <td class="checklist-number">4.</td>
+          <td>Minuta de hipoteca</td>
+          <td></td>
+          <td class="checklist-number">12.</td>
+          <td>Otros documentos:</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="checklist-number">5.</td>
+          <td>Otro crédito: PAGARES</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table> -->
+
+    <div class="footer">
+      <!-- <div class="info-row">
+        <div class="info-label">OBSERVACIONES:</div>
+        {{Observaciones}}
+      </div> -->
+      <div class="info-row">
+        <div class="info-label">ELABORO:</div>
+        {{Elaboro}}
+      </div>
+      <div class="info-row">
+        <div class="info-label">Fecha de impresión:</div>
+        {{FechaElaboracion}}
+      </div>
+    </div>
+
+    <div class="page-footer">{{TextoFooter}}</div>
+  </body>
+</html>

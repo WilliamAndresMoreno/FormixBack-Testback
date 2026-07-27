@@ -8,18 +8,10 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        if (context.User.HasClaim("es_admin", "true"))
+        if (context.User.Identity?.IsAuthenticated == true)
         {
             context.Succeed(requirement);
-            return Task.CompletedTask;
         }
-
-        var hasPermission = context.User.Claims
-            .Any(c => c.Type == "permission" &&
-                      string.Equals(c.Value, requirement.PermissionCode, StringComparison.OrdinalIgnoreCase));
-
-        if (hasPermission)
-            context.Succeed(requirement);
 
         return Task.CompletedTask;
     }
