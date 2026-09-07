@@ -103,9 +103,12 @@ public static class MayasoftTramiteMapper
         mapped.IdSalesforce = entity.IdSalesforce;
 
         // Copia todas las propiedades del objeto recién mapeado hacia la entidad existente, excepto la llave primaria
+        // y las columnas de control (IdRadicado, FechaUltimaSincronizacion), que no vienen del DTO y no deben perderse
         foreach (var prop in typeof(TramiteMayasoft).GetProperties())
         {
-            if (prop.Name is nameof(TramiteMayasoft.Id)) continue;
+            if (prop.Name is nameof(TramiteMayasoft.Id)
+                or nameof(TramiteMayasoft.IdRadicado)
+                or nameof(TramiteMayasoft.FechaUltimaSincronizacion)) continue;
             prop.SetValue(entity, prop.GetValue(mapped));
         }
     }
