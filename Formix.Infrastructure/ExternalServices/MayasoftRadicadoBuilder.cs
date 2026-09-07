@@ -48,7 +48,7 @@ public class MayasoftRadicadoBuilder
         var terceros = await ObtenerOCrearTercerosAsync(dto, ct);
         var porcentaje = terceros.Count > 0 ? Math.Round(100m / terceros.Count, 2) : 100m;
 
-        foreach (var tercero in terceros)
+        foreach (var (tercero, esTitular) in terceros)
         {
             var otorgante = new RadicadosOtorgante { IdRadicado = radicado.IdRadicado, IdTercero = tercero.IdTercero };
             _db.RadicadosOtorgantes.Add(otorgante);
@@ -57,7 +57,7 @@ public class MayasoftRadicadoBuilder
             _db.RadicadosOtorgantesTipos.Add(new RadicadosOtorgantesTipo
             {
                 IdRadicadoOtorgante = otorgante.IdRadicadoOtorgante,
-                IdTipoOtorgante = _options.IdTipoOtorganteComprador,
+                IdTipoOtorgante = esTitular ? _options.IdTipoOtorganteComprador : _options.IdTipoOtorganteCompradorAlterno, // Titular = Comprador Principal, alternos = Comprador Alterno
                 ActoCodigo = _options.ActoCodigoCompraventa,
                 Porcentaje = porcentaje,
                 AnioAdquisicion = ahora.Year,
@@ -78,7 +78,7 @@ public class MayasoftRadicadoBuilder
                 Orden = orden++
             });
 
-            foreach (var tercero in terceros)
+            foreach (var (tercero, esTitular) in terceros)
             {
                 var yaExiste = await _db.InmublesTerceros
                     .AnyAsync(x => x.IdTercero == tercero.IdTercero && x.IdInmueble == inmueble.InmuebleId, ct);
@@ -88,7 +88,7 @@ public class MayasoftRadicadoBuilder
                     {
                         IdTercero = tercero.IdTercero,
                         IdInmueble = inmueble.InmuebleId,
-                        IdTipoOtorgante = _options.IdTipoOtorganteComprador
+                        IdTipoOtorgante = esTitular ? _options.IdTipoOtorganteComprador : _options.IdTipoOtorganteCompradorAlterno
                     });
                 }
             }
@@ -167,14 +167,15 @@ public class MayasoftRadicadoBuilder
 
     // ---------- Terceros ----------
 
-    private async Task<List<Tercero>> ObtenerOCrearTercerosAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
+    // Devuelve cada tercero junto con un indicador de si es el comprador titular (true) o alterno (false)
+    private async Task<List<(Tercero Tercero, bool EsTitular)>> ObtenerOCrearTercerosAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
     {
-        var compradores = new List<CompradorDto>();
-        if (dto.CompradorTitular is not null) compradores.Add(dto.CompradorTitular);
-        if (dto.CompradoresAlternos is not null) compradores.AddRange(dto.CompradoresAlternos);
+        var compradores = new List<(CompradorDto Comprador, bool EsTitular)>();
+        if (dto.CompradorTitular is not null) compradores.Add((dto.CompradorTitular, true));
+        if (dto.CompradoresAlternos is not null) compradores.AddRange(dto.CompradoresAlternos.Select(a => ((CompradorDto)a, false)));
 
-        var resultado = new List<Tercero>();
-        foreach (var c in compradores)
+        var resultado = new List<(Tercero Tercero, bool EsTitular)>();
+        foreach (var (c, esTitular) in compradores)
         {
             if (string.IsNullOrWhiteSpace(c.Nombre) && string.IsNullOrWhiteSpace(c.NumeroDeIdentificacion)) continue;
 
@@ -214,8 +215,8 @@ public class MayasoftRadicadoBuilder
                 tercero.IdEstadoCivil = await BuscarEstadoCivilAsync(c.EstadoCivil, ct) ?? tercero.IdEstadoCivil;
             }
 
-            if (!resultado.Any(r => r.IdTercero == tercero.IdTercero))
-                resultado.Add(tercero);
+            if (!resultado.Any(r => r.Tercero.IdTercero == tercero.IdTercero))
+                resultado.Add((tercero, esTitular));
         }
 
         return resultado;
@@ -248,10 +249,10 @@ public class MayasoftRadicadoBuilder
     {
         // El orden define RadicadosInmuebles.Orden: 1 = unidad principal, luego garajes, depósitos y depósitos útiles
         var productos = new List<(ProductoDto Producto, string Tipo)>();
-        if (dto.UnidadPrincipal is not null) productos.Add((dto.UnidadPrincipal, "Apartamento"));
+        if (dto.UnidadPrincipal is not null) productos.Add((dto.UnidadPrincipal, "Apartamento")); // Se refina por el nombre del producto (Casa, Local...)
         productos.AddRange((dto.Garajes ?? new()).Select(p => (p, "Garaje")));
-        productos.AddRange((dto.Depositos ?? new()).Select(p => (p, "Depósito")));
-        productos.AddRange((dto.DepositosUtiles ?? new()).Select(p => (p, "Depósito útil")));
+        productos.AddRange((dto.Depositos ?? new()).Select(p => (p, "Deposito")));
+        productos.AddRange((dto.DepositosUtiles ?? new()).Select(p => (p, "Deposito")));
 
         var resultado = new List<Inmueble>();
         foreach (var (p, tipoNombre) in productos)
@@ -274,7 +275,7 @@ public class MayasoftRadicadoBuilder
                     Nombre = Trunc(p.Nombre ?? matricula ?? tipoNombre, 200)!,
                     Numero = Trunc(ExtraerNumero(p.Nombre), 20),
                     MatriculaInmobiliaria = matricula,
-                    TipoInmuebleId = await BuscarTipoInmuebleAsync(tipoNombre, ct),
+                    TipoInmuebleId = await BuscarTipoInmuebleAsync(p.Nombre, tipoNombre, ct),
                     ValorInmueble = p.Precio,
                     FechaCreacion = DateTime.Now
                 };
@@ -294,11 +295,29 @@ public class MayasoftRadicadoBuilder
         return resultado;
     }
 
-    private async Task<int?> BuscarTipoInmuebleAsync(string nombre, CancellationToken ct)
+    // Primero intenta con la primera palabra del nombre del producto ("Casa 12" -> Casa, "Local 3" -> Local);
+    // si no coincide con ningún TipoInmueble, usa el tipo por defecto de la categoría (Apartamento, Garaje, Deposito)
+    private async Task<int?> BuscarTipoInmuebleAsync(string? nombreProducto, string tipoDefecto, CancellationToken ct)
     {
-        var n = nombre.ToLower();
-        var tipo = await _db.TipoInmuebles.FirstOrDefaultAsync(x => x.Nombre.ToLower().Contains(n), ct);
+        var primeraPalabra = nombreProducto?.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(primeraPalabra))
+        {
+            var pp = QuitarTildes(primeraPalabra).ToLower();
+            var porNombre = await _db.TipoInmuebles.FirstOrDefaultAsync(x => x.Nombre.ToLower() == pp, ct);
+            if (porNombre is not null) return porNombre.TipoInmuebleId;
+        }
+
+        var td = tipoDefecto.ToLower();
+        var tipo = await _db.TipoInmuebles.FirstOrDefaultAsync(x => x.Nombre.ToLower() == td, ct);
         return tipo?.TipoInmuebleId;
+    }
+
+    // "Depósito" -> "Deposito", para comparar contra los nombres sin tilde de TipoInmuebles
+    private static string QuitarTildes(string texto)
+    {
+        var normalizado = texto.Normalize(System.Text.NormalizationForm.FormD);
+        var sinMarcas = new string(normalizado.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+        return sinMarcas.Normalize(System.Text.NormalizationForm.FormC);
     }
 
     // ---------- Pagos ----------
