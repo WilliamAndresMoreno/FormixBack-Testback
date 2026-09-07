@@ -82,4 +82,8 @@ public class TramiteMayasoft
     public string? DepositosUtilesJson { get; set; }
 
     public DateTime FechaExtraccion { get; set; } = DateTime.Now;
+
+    // Control de idempotencia: radicado de Formix creado a partir de este trámite (null = aún no distribuido a las tablas normalizadas)
+    public int? IdRadicado { get; set; }
+    public DateTime? FechaUltimaSincronizacion { get; set; } // Última vez que este trámite se procesó (insert o update)
 }

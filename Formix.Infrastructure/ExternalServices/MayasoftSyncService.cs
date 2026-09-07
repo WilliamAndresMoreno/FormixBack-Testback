@@ -4,17 +4,25 @@ using Microsoft.Extensions.Logging;
 
 namespace Formix.Infrastructure.ExternalServices;
 
-// Orquesta la sincronización: consulta MayasoftAPI, mapea cada trámite y hace upsert (insertar o actualizar) en la tabla
+// Orquesta la sincronización: consulta MayasoftAPI y, por cada trámite,
+// (1) guarda/actualiza la fila de control en TramitesMayasoft y
+// (2) crea o actualiza el radicado en las tablas normalizadas de Formix.
 public class MayasoftSyncService : IMayasoftSyncService
 {
     private readonly IMayasoftApiClient _client;
     private readonly AppDbContext _db;
+    private readonly MayasoftRadicadoBuilder _builder;
     private readonly ILogger<MayasoftSyncService> _logger;
 
-    public MayasoftSyncService(IMayasoftApiClient client, AppDbContext db, ILogger<MayasoftSyncService> logger)
+    public MayasoftSyncService(
+        IMayasoftApiClient client,
+        AppDbContext db,
+        MayasoftRadicadoBuilder builder,
+        ILogger<MayasoftSyncService> logger)
     {
         _client = client;
         _db = db;
+        _builder = builder;
         _logger = logger;
     }
 
@@ -22,26 +30,55 @@ public class MayasoftSyncService : IMayasoftSyncService
     {
         var tramites = await _client.ObtenerTramitesAsync(ct);
         var procesados = 0;
+        var fallidos = 0;
 
         foreach (var dto in tramites)
         {
-            // Busca si el trámite ya existe en la tabla por su Id de Salesforce
-            var existente = await _db.TramitesMayasoft
-                .FirstOrDefaultAsync(t => t.IdSalesforce == dto.Id, ct);
+            // Cada trámite va en su propia transacción: si uno falla, no afecta a los demás
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var control = await _db.TramitesMayasoft
+                    .FirstOrDefaultAsync(t => t.IdSalesforce == dto.Id, ct);
 
-            if (existente is null)
-            {
-                _db.TramitesMayasoft.Add(MayasoftTramiteMapper.MapToEntity(dto)); // No existe: se inserta
+                if (control is null)
+                {
+                    control = MayasoftTramiteMapper.MapToEntity(dto);
+                    _db.TramitesMayasoft.Add(control);
+                }
+                else
+                {
+                    MayasoftTramiteMapper.UpdateEntity(control, dto);
+                }
+
+                if (control.IdRadicado is null)
+                {
+                    // Primera vez que se ve este trámite: se crea el radicado completo y se guarda el vínculo
+                    control.IdRadicado = await _builder.CrearRadicadoAsync(dto, ct);
+                    _logger.LogInformation("Trámite {Id} -> Radicado {IdRadicado} creado.", dto.Id, control.IdRadicado);
+                }
+                else
+                {
+                    // Ya existe: solo se refresca la información que puede cambiar (pagos, contacto, fecha OE)
+                    await _builder.ActualizarRadicadoAsync(control.IdRadicado.Value, dto, ct);
+                    _logger.LogInformation("Trámite {Id} -> Radicado {IdRadicado} actualizado.", dto.Id, control.IdRadicado);
+                }
+
+                control.FechaUltimaSincronizacion = DateTime.Now;
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                procesados++;
             }
-            else
+            catch (Exception ex)
             {
-                MayasoftTramiteMapper.UpdateEntity(existente, dto); // Ya existe: se actualiza
+                await tx.RollbackAsync(ct);
+                _db.ChangeTracker.Clear(); // Se descartan las entidades a medio crear para que no contaminen el siguiente trámite
+                fallidos++;
+                _logger.LogError(ex, "Error procesando el trámite {Id} de Mayasoft.", dto.Id);
             }
-            procesados++;
         }
 
-        await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Sincronización Mayasoft completada: {Count} trámites procesados.", procesados);
+        _logger.LogInformation("Sincronización Mayasoft completada: {Ok} trámites procesados, {Fallidos} con error.", procesados, fallidos);
         return procesados;
     }
 }

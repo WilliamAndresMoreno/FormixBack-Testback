@@ -94,6 +94,7 @@ builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProv
 // Registro de la integración con MayasoftAPI: configuración, cliente HTTP, servicio de sincronización y tarea programada
 builder.Services.Configure<MayasoftApiOptions>(builder.Configuration.GetSection("MayasoftApi"));
 builder.Services.AddHttpClient<IMayasoftApiClient, MayasoftApiClient>();
+builder.Services.AddScoped<MayasoftRadicadoBuilder>(); // Construye el radicado normalizado (Radicados, Terceros, Inmuebles, Pagos...) a partir de cada trámite
 builder.Services.AddScoped<IMayasoftSyncService, MayasoftSyncService>();
 builder.Services.AddHostedService<MayasoftSyncBackgroundService>();
 
