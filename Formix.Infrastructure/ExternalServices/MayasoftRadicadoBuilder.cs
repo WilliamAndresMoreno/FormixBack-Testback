@@ -26,13 +26,14 @@ public class MayasoftRadicadoBuilder
     // Crea el radicado completo para un trámite que aún no existe en Formix. Devuelve el IdRadicado generado.
     public async Task<int> CrearRadicadoAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
     {
-        var proyecto = await ObtenerOCrearProyectoAsync(dto, ct);
+        var tenantId = await ResolverTenantAsync(dto, ct); // Notaría del trámite (caso_tramite.notaria) -> Tenant de Formix
+        var proyecto = await ObtenerOCrearProyectoAsync(dto, tenantId, ct);
         var ahora = DateTime.Now;
 
         // 1. Radicado principal
         var radicado = new Radicado
         {
-            TenantId = _options.TenantId,
+            TenantId = tenantId,
             ProyectoId = proyecto.ProyectoId,
             PlantillaId = null,
             UsuarioId = _options.UsuarioSistemaId,
@@ -45,7 +46,7 @@ public class MayasoftRadicadoBuilder
         await _db.SaveChangesAsync(ct); // Se guarda primero para obtener el IdRadicado que usan las tablas hijas
 
         // 2. Terceros (comprador titular + alternos) y su vínculo como otorgantes del radicado
-        var terceros = await ObtenerOCrearTercerosAsync(dto, ct);
+        var terceros = await ObtenerOCrearTercerosAsync(dto, tenantId, ct);
         var porcentaje = terceros.Count > 0 ? Math.Round(100m / terceros.Count, 2) : 100m;
 
         foreach (var (tercero, esTitular) in terceros)
@@ -67,7 +68,7 @@ public class MayasoftRadicadoBuilder
         }
 
         // 3. Inmuebles (unidad principal + garajes + depósitos + depósitos útiles) y su vínculo con el radicado y los terceros
-        var inmuebles = await ObtenerOCrearInmueblesAsync(dto, proyecto.ProyectoId, ct);
+        var inmuebles = await ObtenerOCrearInmueblesAsync(dto, proyecto.ProyectoId, tenantId, ct);
         var orden = 1;
         foreach (var inmueble in inmuebles)
         {
@@ -129,21 +130,51 @@ public class MayasoftRadicadoBuilder
         if (radicado is not null)
             radicado.FechaOe = dto.CasoTramite?.FechaProyectadaProgramadaFinal ?? radicado.FechaOe;
 
-        await ObtenerOCrearTercerosAsync(dto, ct); // Refresca correo/celular/estado civil de los compradores existentes
+        var tenantId = radicado?.TenantId ?? _options.TenantId;
+        await ObtenerOCrearTercerosAsync(dto, tenantId, ct); // Refresca correo/celular/tipo doc/estado civil de los compradores existentes
 
         await _db.SaveChangesAsync(ct);
     }
 
+    // ---------- Tenant (notaría) ----------
+
+    // Cusezar envía la notaría como "NOTARIA 50"; en Formix el tenant tiene CodigoNotaria "N50BTA" y NombreComercial "NOTARIA 50 DEL CÍRCULO...".
+    // Se extrae el número y se busca por ambos campos. Si no existe, se usa el TenantId por defecto (o se rechaza el trámite, según configuración).
+    private async Task<int> ResolverTenantAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
+    {
+        var notaria = dto.CasoTramite?.Notaria;
+        var numero = ExtraerNumero(notaria);
+
+        if (!string.IsNullOrEmpty(numero))
+        {
+            var n = int.Parse(numero);
+            var codigoPrefijo = $"N{n:00}";              // "N50"
+            var nombrePrefijo = $"NOTARIA {n} ";          // "NOTARIA 50 "
+
+            var tenant = await _db.Tenants.FirstOrDefaultAsync(t =>
+                t.CodigoNotaria.StartsWith(codigoPrefijo) ||
+                (t.NombreComercial != null && t.NombreComercial.ToUpper().StartsWith(nombrePrefijo)), ct);
+
+            if (tenant is not null) return tenant.TenantId;
+        }
+
+        if (!_options.RadicarSiNotariaNoExiste)
+            throw new InvalidOperationException($"La notaría '{notaria}' del trámite {dto.Id} no corresponde a ningún tenant de Formix.");
+
+        _logger.LogWarning("Notaría '{Notaria}' del trámite {Id} no coincide con ningún tenant; se usa TenantId por defecto {TenantId}.", notaria, dto.Id, _options.TenantId);
+        return _options.TenantId;
+    }
+
     // ---------- Proyecto ----------
 
-    private async Task<Proyecto> ObtenerOCrearProyectoAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
+    private async Task<Proyecto> ObtenerOCrearProyectoAsync(TramiteMayasoftResponseDto dto, int tenantId, CancellationToken ct)
     {
         var nombre = dto.Proyecto?.NombreDelProyecto?.Trim();
         if (string.IsNullOrWhiteSpace(nombre))
             throw new InvalidOperationException($"El trámite {dto.Id} no trae nombre de proyecto.");
 
         var proyecto = await _db.Proyectos
-            .FirstOrDefaultAsync(p => p.TenantId == _options.TenantId && p.Nombre.ToLower() == nombre.ToLower(), ct);
+            .FirstOrDefaultAsync(p => p.TenantId == tenantId && p.Nombre.ToLower() == nombre.ToLower(), ct);
 
         if (proyecto is not null) return proyecto;
 
@@ -153,7 +184,7 @@ public class MayasoftRadicadoBuilder
         _logger.LogWarning("Proyecto '{Nombre}' no existe en Formix; se crea con datos mínimos (trámite {Id}).", nombre, dto.Id);
         proyecto = new Proyecto
         {
-            TenantId = _options.TenantId,
+            TenantId = tenantId,
             Nombre = nombre,
             Descripcion = dto.Macroproyecto?.NombreDelMacroproyecto ?? nombre,
             MunicipioCodigoDane = _options.MunicipioCodigoDaneDefault,
@@ -168,7 +199,7 @@ public class MayasoftRadicadoBuilder
     // ---------- Terceros ----------
 
     // Devuelve cada tercero junto con un indicador de si es el comprador titular (true) o alterno (false)
-    private async Task<List<(Tercero Tercero, bool EsTitular)>> ObtenerOCrearTercerosAsync(TramiteMayasoftResponseDto dto, CancellationToken ct)
+    private async Task<List<(Tercero Tercero, bool EsTitular)>> ObtenerOCrearTercerosAsync(TramiteMayasoftResponseDto dto, int tenantId, CancellationToken ct)
     {
         var compradores = new List<(CompradorDto Comprador, bool EsTitular)>();
         if (dto.CompradorTitular is not null) compradores.Add((dto.CompradorTitular, true));
@@ -185,7 +216,7 @@ public class MayasoftRadicadoBuilder
             if (!string.IsNullOrWhiteSpace(documento))
             {
                 tercero = await _db.Terceros
-                    .FirstOrDefaultAsync(t => t.TenantId == _options.TenantId && t.Documento == documento, ct);
+                    .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.Documento == documento, ct);
             }
 
             var (nombres, apellidos) = SepararNombre(c.Nombre);
@@ -194,7 +225,7 @@ public class MayasoftRadicadoBuilder
             {
                 tercero = new Tercero
                 {
-                    TenantId = _options.TenantId,
+                    TenantId = tenantId,
                     NombreCompleto = Trunc(c.Nombre ?? documento ?? "SIN NOMBRE", 200)!,
                     Nombre = Trunc(nombres, 200),
                     Apellido = Trunc(apellidos, 200),
@@ -209,9 +240,10 @@ public class MayasoftRadicadoBuilder
             }
             else
             {
-                // Ya existe: solo se refrescan los datos de contacto que pueden cambiar
+                // Ya existe: se refrescan los datos de contacto y se completan los lookups que hayan quedado vacíos
                 tercero.Correo = Trunc(c.CorreoElectronico, 100) ?? tercero.Correo;
                 tercero.Celular = Trunc(c.Celular, 100) ?? tercero.Celular;
+                tercero.IdTipoDocumento ??= await BuscarTipoDocumentoAsync(c.TipoDeIdentificacion, ct);
                 tercero.IdEstadoCivil = await BuscarEstadoCivilAsync(c.EstadoCivil, ct) ?? tercero.IdEstadoCivil;
             }
 
@@ -222,15 +254,29 @@ public class MayasoftRadicadoBuilder
         return resultado;
     }
 
+    // Cusezar envía "Cédula de ciudadanía"; Formix tiene Nombre "Cédula", Sigla "C.C.", Codigo "CC".
+    // Se normaliza (sin tildes, sin puntos, minúsculas) y se acepta coincidencia exacta o por prefijo en cualquiera de los tres campos.
     private async Task<int?> BuscarTipoDocumentoAsync(string? texto, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(texto)) return null;
-        var t = texto.Trim().ToLower();
-        var tipo = await _db.TiposDocumentos.FirstOrDefaultAsync(x =>
-            x.Nombre.ToLower() == t ||
-            (x.Sigla != null && x.Sigla.ToLower() == t) ||
-            (x.Codigo != null && x.Codigo.ToLower() == t), ct);
+        var t = NormalizarClave(texto);
+
+        var tipos = await _db.TiposDocumentos.ToListAsync(ct); // Tabla pequeña; se compara en memoria para poder normalizar tildes y puntos
+        var tipo = tipos.FirstOrDefault(x =>
+                       NormalizarClave(x.Nombre) == t ||
+                       (x.Sigla != null && NormalizarClave(x.Sigla) == t) ||
+                       (x.Codigo != null && NormalizarClave(x.Codigo) == t))
+                   ?? tipos.FirstOrDefault(x =>
+                       t.StartsWith(NormalizarClave(x.Nombre)) ||
+                       NormalizarClave(x.Nombre).StartsWith(t));
         return tipo?.IdTipoDocumento;
+    }
+
+    // "Cédula de ciudadanía" -> "ceduladeciudadania"; "C.C." -> "cc"
+    private static string NormalizarClave(string texto)
+    {
+        var sinTildes = QuitarTildes(texto).ToLower();
+        return new string(sinTildes.Where(char.IsLetterOrDigit).ToArray());
     }
 
     private async Task<int?> BuscarEstadoCivilAsync(string? texto, CancellationToken ct)
@@ -245,7 +291,7 @@ public class MayasoftRadicadoBuilder
 
     // ---------- Inmuebles ----------
 
-    private async Task<List<Inmueble>> ObtenerOCrearInmueblesAsync(TramiteMayasoftResponseDto dto, int proyectoId, CancellationToken ct)
+    private async Task<List<Inmueble>> ObtenerOCrearInmueblesAsync(TramiteMayasoftResponseDto dto, int proyectoId, int tenantId, CancellationToken ct)
     {
         // El orden define RadicadosInmuebles.Orden: 1 = unidad principal, luego garajes, depósitos y depósitos útiles
         var productos = new List<(ProductoDto Producto, string Tipo)>();
@@ -270,7 +316,7 @@ public class MayasoftRadicadoBuilder
             {
                 inmueble = new Inmueble
                 {
-                    TenantId = _options.TenantId,
+                    TenantId = tenantId,
                     ProyectoId = proyectoId,
                     Nombre = Trunc(p.Nombre ?? matricula ?? tipoNombre, 200)!,
                     Numero = Trunc(ExtraerNumero(p.Nombre), 20),

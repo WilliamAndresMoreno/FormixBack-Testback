@@ -11,7 +11,8 @@ public class MayasoftApiOptions
     public int SyncIntervalHours { get; set; } = 24;    // Horas entre cada sincronización automática
 
     // Valores que la API de Cusezar no envía y que Formix necesita para crear el radicado
-    public int TenantId { get; set; } = 1;                          // Tenant de Cusezar en Formix
+    public int TenantId { get; set; } = 1;                          // Tenant por defecto cuando la notaría del trámite no coincide con ningún tenant
+    public bool RadicarSiNotariaNoExiste { get; set; } = true;      // true = usar TenantId por defecto; false = rechazar el trámite
     public int UsuarioSistemaId { get; set; } = 3;                  // Usuario "sistema" dueño de los radicados automáticos (3 = Admin)
     public int IdEstadoRadicadoInicial { get; set; } = 1;           // Estado inicial en TiposEstadoRadicado
     public int IdActoCompraventa { get; set; } = 33;                // IdActo de compraventa en la tabla Actos (33 = CVBIEI)
